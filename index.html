@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dona Paula • Caixa PIX</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<style>
+:root{
+  --cor:#b63b2e;
+  --bg:#fff6f1;
+  --card:#ffffff;
+  --verde:#2e7d32;
+  --azul:#1565c0;
+}
+body{
+  font-family:'Segoe UI',Arial;
+  background:var(--bg);
+  margin:0;
+  padding:15px;
+}
+h1{
+  text-align:center;
+  color:var(--cor);
+  margin-bottom:20px;
+}
+.card{
+  background:var(--card);
+  border-radius:16px;
+  padding:18px;
+  margin-bottom:18px;
+  box-shadow:0 10px 25px rgba(0,0,0,.08);
+}
+input,button{
+  width:100%;
+  padding:12px;
+  margin-top:10px;
+  border-radius:10px;
+  border:1px solid #ddd;
+  font-size:15px;
+}
+button{
+  border:none;
+  background:var(--cor);
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+}
+button.green{background:var(--verde)}
+button.blue{background:var(--azul)}
+button.red{background:#c62828}
+#qrcode{text-align:center;margin:15px 0}
+.stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+}
+.stats div{
+  background:#ffe1d8;
+  padding:12px;
+  border-radius:12px;
+  text-align:center;
+}
+.list .item{
+  background:#fafafa;
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:8px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+small{color:#666}
+.confirmacao{
+  display:none;
+  text-align:center;
+  font-size:22px;
+  color:var(--verde);
+  animation:pop .5s ease;
+}
+@keyframes pop{
+  from{transform:scale(.7);opacity:0}
+  to{transform:scale(1);opacity:1}
+}
+</style>
+</head>
+
+<body>
+
+<h1>🍬 Dona Paula • Caixa PIX</h1>
+
+<div class="card" id="pagamentoBox">
+  <h3>Novo pagamento</h3>
+  <input id="cliente" placeholder="Nome do cliente">
+  <input id="valor" type="number" step="0.01" placeholder="Valor (ex: 12.00)">
+  <input id="data" type="date">
+  <button onclick="gerar()">Gerar QR Code</button>
+
+  <div id="qrcode"></div>
+
+  <small>Código PIX</small>
+  <input id="codigoPix" readonly>
+  <button class="blue" onclick="copiar()">📋 Copiar código</button>
+  <button class="green" onclick="marcarPago()">✅ Já paguei</button>
+</div>
+
+<div class="confirmacao" id="confirmacao">
+  🎉 Pagamento confirmado!
+</div>
+
+<div class="card">
+  <h3>📊 Resumo</h3>
+  <div class="stats">
+    <div><b id="totalQR">0</b><br>QR gerados</div>
+    <div><b id="totalPago">0</b><br>Pagos</div>
+    <div><b id="faturamento">R$ 0,00</b></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>🔍 Pagamentos por data</h3>
+  <input id="filtroData" type="date" onchange="filtrar()">
+  <div class="list" id="lista"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getFirestore, addDoc, collection, updateDoc, doc,
+  onSnapshot, query, where, getDocs, deleteDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDDykQQH_vhq9lj4dlwPZgtrZQDFr8eVcI",
+  authDomain: "dona-paula-pix.firebaseapp.com",
+  projectId: "dona-paula-pix",
+  storageBucket: "dona-paula-pix.firebasestorage.app",
+  messagingSenderId: "786103759925",
+  appId: "1:786103759925:web:592b34220b9a38753f2d7c"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const PIX_CHAVE="gustavopaulo2283@gmail.com";
+const PIX_NOME="DONA PAULA";
+const PIX_CIDADE="BRASIL";
+
+let pagamentoId=null, codigoAtual="";
+
+window.gerar = async ()=>{
+  const cliente=clienteInput.value||cliente.value;
+  const valor=valorInput?.value||valor.value;
+  const data=dataInput?.value||data.value;
+  if(!cliente||!valor||!data) return alert("Preencha tudo");
+
+  qrcode.innerHTML="";
+  confirmacao.style.display="none";
+
+  codigoAtual=payload(valor);
+  codigoPix.value=codigoAtual;
+
+  new QRCode(qrcode,{text:codigoAtual,width:220,height:220});
+
+  const ref=await addDoc(collection(db,"pagamentos"),{
+    cliente,valor:Number(valor),data,status:"pendente",criadoEm:new Date()
+  });
+  pagamentoId=ref.id;
+};
+
+window.marcarPago = async ()=>{
+  if(!pagamentoId) return;
+  await updateDoc(doc(db,"pagamentos",pagamentoId),{
+    status:"pago",pagoEm:new Date()
+  });
+  pagamentoBox.style.display="none";
+  confirmacao.style.display="block";
+};
+
+window.copiar=()=>navigator.clipboard.writeText(codigoAtual);
+
+function emv(i,v){return i+v.length.toString().padStart(2,"0")+v}
+function crc(p){let c=0xFFFF;for(let i=0;i<p.length;i++){c^=p.charCodeAt(i)<<8;for(let j=0;j<8;j++)c=(c&0x8000)?(c<<1)^0x1021:c<<1}return(c&0xFFFF).toString(16).toUpperCase().padStart(4,"0")}
+function payload(valor){
+  let p=emv("00","01")+emv("26",emv("00","BR.GOV.BCB.PIX")+emv("01",PIX_CHAVE))+emv("52","0000")+emv("53","986")+emv("54",Number(valor).toFixed(2))+emv("58","BR")+emv("59",PIX_NOME)+emv("60",PIX_CIDADE)+"6304";
+  return p+crc(p);
+}
+
+onSnapshot(collection(db,"pagamentos"),snap=>{
+  let t=0,p=0,s=0;
+  snap.forEach(d=>{t++;if(d.data().status==="pago"){p++;s+=d.data().valor}});
+  totalQR.innerText=t; totalPago.innerText=p; faturamento.innerText="R$ "+s.toFixed(2);
+});
+
+window.filtrar = async ()=>{
+  lista.innerHTML="";
+  const q=query(collection(db,"pagamentos"),where("data","==",filtroData.value));
+  const snap=await getDocs(q);
+  snap.forEach(d=>{
+    const p=d.data();
+    lista.innerHTML+=`
+      <div class="item">
+        <span>${p.cliente} • R$ ${p.valor.toFixed(2)} • ${p.status}</span>
+        <button class="red" onclick="excluir('${d.id}')">🗑️</button>
+      </div>`;
+  });
+};
+
+window.excluir = async (id)=>{
+  if(confirm("Excluir este pagamento?")){
+    await deleteDoc(doc(db,"pagamentos",id));
+  }
+};
+</script>
+
+</body>
+</html>
