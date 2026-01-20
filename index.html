@@ -4,27 +4,63 @@
 <meta charset="UTF-8">
 <title>Dona Paula • Caixa PIX</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
-body{font-family:Arial;background:#fff3ee;padding:15px}
-h1{text-align:center;color:#b63b2e}
-.card{background:#fff;padding:15px;border-radius:14px;margin-bottom:15px;box-shadow:0 5px 15px rgba(0,0,0,.1)}
-input,button{width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #ccc}
-button{background:#b63b2e;color:#fff;border:none;font-weight:bold;cursor:pointer}
-button.green{background:#2e7d32}
-button.red{background:#c62828}
-button.blue{background:#1565c0}
-#qrcode{text-align:center;margin:10px}
-.list{max-height:300px;overflow:auto}
-.item{border-bottom:1px solid #eee;padding:8px}
-.status-pago{color:green;font-weight:bold}
-.status-pendente{color:#c62828}
-.confirmacao{display:none;text-align:center;font-size:22px;color:green;animation:zoom .5s}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial;}
+body{
+  background: linear-gradient(135deg,#ffe6dc,#fff);
+  padding:20px;
+}
+h1{text-align:center;color:#b63b2e;margin-bottom:20px;animation:fadeIn 1s;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.card{
+  background:#fff;
+  padding:20px;
+  border-radius:20px;
+  margin-bottom:20px;
+  box-shadow:0 10px 25px rgba(0,0,0,.12);
+  animation:slideUp 0.6s;
+}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+input,button{
+  width:100%;
+  padding:12px;
+  margin-top:10px;
+  border-radius:12px;
+  border:1px solid #ddd;
+  font-size:15px;
+  transition:0.3s;
+}
+input:focus{border-color:#b63b2e;outline:none;box-shadow:0 0 8px rgba(182,59,46,0.4);}
+button{background:#b63b2e;color:#fff;border:none;font-weight:600;cursor:pointer;transition:.3s;position:relative;}
+button:hover{opacity:.9;transform:scale(1.03);}
+.green{background:#2e7d32;}
+.red{background:#c62828;}
+.blue{background:#1565c0;}
+
+#qrcode{text-align:center;margin:15px;}
+
+.stats{display:flex;gap:10px;flex-wrap:wrap;}
+.stats div{flex:1;background:#ffe0d6;padding:12px;border-radius:14px;text-align:center;font-weight:600;transition:.3s;}
+.stats div:hover{background:#ffd0c6;transform:scale(1.05);}
+
+.list{max-height:280px;overflow:auto;margin-top:10px;}
+.item{padding:10px;border-bottom:1px solid #eee;transition:.3s;}
+.item:hover{background:#fff0f0;}
+.status-pago{color:#2e7d32;font-weight:bold;}
+.status-pendente{color:#c62828;font-weight:bold;}
+
+.confirmacao{
+  display:none;
+  text-align:center;
+  font-size:26px;
+  color:#2e7d32;
+  padding:40px;
+  animation:zoom .6s ease;
+}
+.check{font-size:60px;margin-bottom:10px;}
 @keyframes zoom{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
-.stats{display:flex;gap:10px}
-.stats div{flex:1;background:#ffe0d6;padding:10px;border-radius:10px;text-align:center}
 </style>
 </head>
 
@@ -34,31 +70,35 @@ button.blue{background:#1565c0}
 
 <div class="card" id="gerador">
   <input id="cliente" placeholder="Nome do cliente">
+  <input id="produto" placeholder="O que foi comprado (ex: 3 trufas)">
   <input id="valor" type="number" step="0.01" placeholder="Valor">
   <input id="data" type="date">
   <button onclick="gerar()">Gerar QR Code</button>
-
   <div id="qrcode"></div>
-
   <input id="codigoPix" readonly>
   <button class="blue" onclick="copiar()">📋 Copiar código PIX</button>
   <button class="green" onclick="pagar()">✅ Já pagou</button>
 </div>
 
-<div class="confirmacao" id="ok">💖 Pagamento confirmado!</div>
+<div class="confirmacao" id="ok">
+  <div class="check">💖</div>
+  Pagamento confirmado!
+</div>
 
 <div class="card">
   <h3>📊 Resumo</h3>
   <div class="stats">
-    <div><b id="totalQR">0</b><br>QR gerados</div>
-    <div><b id="totalPago">0</b><br>Pagos</div>
-    <div><b id="faturamento">R$ 0,00</b></div>
+    <div><span id="totalQR">0</span><br>QR gerados</div>
+    <div><span id="totalPago">0</span><br>Pagos</div>
+    <div><span id="faturamento">R$ 0,00</span></div>
   </div>
 </div>
 
 <div class="card">
-  <h3>🔍 Pesquisar por data</h3>
-  <input id="filtroData" type="date" onchange="filtrar()">
+  <h3>🔍 Buscar cliente / data</h3>
+  <input id="filtroNome" placeholder="Nome do cliente">
+  <input id="filtroData" type="date">
+  <button class="blue" onclick="filtrar()">Buscar</button>
   <div class="list" id="lista"></div>
 </div>
 
@@ -83,77 +123,123 @@ const PIX_CIDADE="BRASIL";
 let idAtual="", codigoAtual="";
 
 window.gerar = async ()=>{
-  const cliente=clienteInput();
-  const valor=valorInput();
-  const data=dataInput();
-  if(!cliente||!valor||!data) return alert("Preencha tudo");
+  const cliente = document.getElementById("cliente").value;
+  const produto = document.getElementById("produto").value;
+  const valor = document.getElementById("valor").value;
+  const data = document.getElementById("data").value;
+  if(!cliente||!produto||!valor||!data) return alert("Preencha todos os campos");
 
-  qrcode.innerHTML="";
-  ok.style.display="none";
-  gerador.style.display="block";
+  document.getElementById("qrcode").innerHTML="";
+  document.getElementById("ok").style.display="none";
+  document.getElementById("gerador").style.display="block";
 
   codigoAtual = gerarPix(valor);
-  codigoPix.value = codigoAtual;
+  document.getElementById("codigoPix").value = codigoAtual;
 
-  new QRCode(qrcode,{text:codigoAtual,width:220,height:220});
+  new QRCode(document.getElementById("qrcode"), {text:codigoAtual,width:220,height:220});
 
   const ref = await addDoc(collection(db,"pagamentos"),{
-    cliente,valor:Number(valor),data,status:"pendente"
+    cliente, produto, valor:Number(valor), data, status:"pendente"
   });
-  idAtual=ref.id;
+  idAtual = ref.id;
 };
 
 window.pagar = async ()=>{
   if(!idAtual) return;
   await updateDoc(doc(db,"pagamentos",idAtual),{status:"pago"});
-  gerador.style.display="none";
-  ok.style.display="block";
+
+  document.getElementById("gerador").style.display="none";
+  document.getElementById("ok").style.display="block";
+
+  setTimeout(()=>{
+    document.getElementById("ok").style.display="none";
+    document.getElementById("gerador").style.display="block";
+    document.getElementById("cliente").value="";
+    document.getElementById("produto").value="";
+    document.getElementById("valor").value="";
+    document.getElementById("data").value="";
+    document.getElementById("qrcode").innerHTML="";
+    document.getElementById("codigoPix").value="";
+    idAtual="";
+  },2500);
 };
 
 window.copiar=()=>navigator.clipboard.writeText(codigoAtual);
 
-onSnapshot(collection(db,"pagamentos"),snap=>{
-  let t=0,p=0,s=0;
+onSnapshot(collection(db,"pagamentos"), snap => {
+  atualizarLista(snap.docs);
+});
+
+window.excluir = async id => await deleteDoc(doc(db,"pagamentos",id));
+
+// Função de filtro
+window.filtrar = async () => {
+  const nome = document.getElementById("filtroNome").value.toLowerCase();
+  const data = document.getElementById("filtroData").value;
+
+  const colRef = collection(db,"pagamentos");
+  const snap = await getDocs(colRef);
+
+  const filtrados = snap.docs.filter(d=>{
+    const x = d.data();
+    let cond = true;
+    if(nome) cond = cond && x.cliente.toLowerCase().includes(nome);
+    if(data) cond = cond && x.data === data;
+    return cond;
+  });
+
+  atualizarLista(filtrados);
+}
+
+// Função para atualizar a lista e resumo
+function atualizarLista(docs){
+  let t=0, p=0, s=0;
+  const lista = document.getElementById("lista");
   lista.innerHTML="";
-  snap.forEach(d=>{
-    const x=d.data(); t++;
+  docs.forEach(d=>{
+    const x = d.data ? d.data() : d.data;
+    t++;
     if(x.status==="pago"){p++;s+=x.valor}
-    lista.innerHTML+=`
+    lista.innerHTML += `
       <div class="item">
-        <b>${x.cliente}</b> • R$ ${x.valor.toFixed(2)} • ${x.data}
+        <b>${x.cliente}</b><br>
+        🛒 ${x.produto}<br>
+        💰 R$ ${x.valor.toFixed(2)} • ${x.data}<br>
         <span class="status-${x.status}">${x.status}</span>
         <button class="red" onclick="excluir('${d.id}')">Excluir</button>
       </div>`;
   });
-  totalQR.innerText=t; totalPago.innerText=p; faturamento.innerText="R$ "+s.toFixed(2);
-});
+  document.getElementById("totalQR").innerText = t;
+  document.getElementById("totalPago").innerText = p;
+  document.getElementById("faturamento").innerText = "R$ "+s.toFixed(2);
+}
 
-window.excluir=async id=>await deleteDoc(doc(db,"pagamentos",id));
-
-window.filtrar=async ()=>{
-  const d=filtroData.value; if(!d) return;
-  const q=query(collection(db,"pagamentos"),where("data","==",d));
-  const snap=await getDocs(q);
-  lista.innerHTML="";
-  snap.forEach(x=>{
-    const v=x.data();
-    lista.innerHTML+=`<div class="item">${v.cliente} • R$ ${v.valor.toFixed(2)} • ${v.status}</div>`;
-  });
-};
-
-const clienteInput=()=>document.getElementById("cliente").value;
-const valorInput=()=>document.getElementById("valor").value;
-const dataInput=()=>document.getElementById("data").value;
-
-function emv(i,v){return i+v.length.toString().padStart(2,"0")+v}
-function crc(p){let c=0xFFFF;for(let i=0;i<p.length;i++){c^=p.charCodeAt(i)<<8;for(let j=0;j<8;j++)c=(c&0x8000)?(c<<1)^0x1021:c<<1}return(c&0xFFFF).toString(16).toUpperCase().padStart(4,"0")}
+// Função PIX válida
+function emv(i,v){return i+v.length.toString().padStart(2,'0')+v}
+function crc16(payload){
+  let crc=0xFFFF;
+  for(let i=0;i<payload.length;i++){
+    crc ^= payload.charCodeAt(i)<<8;
+    for(let j=0;j<8;j++){
+      crc = (crc & 0x8000) ? (crc<<1)^0x1021 : crc<<1;
+    }
+  }
+  return (crc&0xFFFF).toString(16).toUpperCase().padStart(4,'0');
+}
 function gerarPix(valor){
-  let p=emv("00","01")+emv("26",emv("00","BR.GOV.BCB.PIX")+emv("01",PIX_CHAVE))+
-  emv("52","0000")+emv("53","986")+emv("54",Number(valor).toFixed(2))+
-  emv("58","BR")+emv("59",PIX_NOME)+emv("60",PIX_CIDADE)+"6304";
-  return p+crc(p);
+  let payload = "";
+  payload += emv("00","01"); 
+  payload += emv("26", emv("00","BR.GOV.BCB.PIX") + emv("01",PIX_CHAVE)); 
+  payload += emv("52","0000"); 
+  payload += emv("53","986"); 
+  payload += emv("54",Number(valor).toFixed(2)); 
+  payload += emv("58","BR"); 
+  payload += emv("59",PIX_NOME); 
+  payload += emv("60",PIX_CIDADE); 
+  payload += "6304"; 
+  const crc = crc16(payload);
+  return payload + crc;
 }
 </script>
-
 </body>
 </html>
